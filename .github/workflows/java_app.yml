@@ -56,6 +56,12 @@ jobs:
     - name: Scan Docker Image
       run: trivy image myapp
 
+        # DEBUG (Secrets check)
+    - name: Debug Secrets
+      run: |
+        echo "User: ${{ secrets.VM_USER }}"
+        echo "Host: ${{ secrets.VM_HOST }}"
+
     - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
