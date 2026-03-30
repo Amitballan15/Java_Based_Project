@@ -1,0 +1,160 @@
+name: "mybankingappproject"
+trigger: 
+   - none 
+  
+pool:
+  name: Default
+variables: 
+  imageTag: $(Build.BuildId)
+stages:
+  - stage: mvn_compile
+    displayName: "maven compile "
+    jobs:
+      - job:
+        displayName: "maven compile"        
+        steps:
+          - task: Maven@4
+            inputs:
+              azureSubscription: 'banking-app-pardeep'
+              mavenPomFile: 'pom.xml'
+              goals: 'compile'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              javaHomeOption: 'JDKVersion'
+              mavenVersionOption: 'Default'
+              mavenAuthenticateFeed: false
+              effectivePomSkip: false
+              sonarQubeRunAnalysis: false
+          - task: Maven@4
+            inputs:
+              azureSubscription: 'banking-app-pardeep'
+              mavenPomFile: 'pom.xml'
+              goals: 'test'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              javaHomeOption: 'JDKVersion'
+              mavenVersionOption: 'Default'
+              mavenAuthenticateFeed: false
+              effectivePomSkip: false
+              sonarQubeRunAnalysis: false
+  
+  - stage: sonarqube_analysis
+    displayName: "sonarqube analysis"
+    jobs:
+      - job: sonar
+        steps:
+          - task: Maven@4
+            displayName: "Compile Java Code"
+            inputs:
+             azureSubscription: 'banking-app-pardeep'
+             mavenPomFile: 'pom.xml'
+             goals: 'compile'
+             publishJUnitResults: false
+             javaHomeOption: 'JDKVersion'
+             mavenVersionOption: 'Default'
+             mavenAuthenticateFeed: false
+             sonarQubeRunAnalysis: false
+          - task: SonarQubePrepare@7
+            inputs:
+              SonarQube: 'mahesh-sonarqube'
+              scannerMode: 'cli'
+              configMode: 'manual'
+              cliProjectKey: 'mahesh'
+              cliProjectName: 'mahesh'
+              cliSources: '.'
+              extraProperties: |
+               sonar.verbose=true
+               sonar.java.binaries=target
+          - task: SonarQubeAnalyze@7
+            inputs:
+              jdkversion: 'JAVA_HOME_17_X64'
+          - task: SonarQubePublish@7
+            inputs:
+              pollingTimeoutSec: '300'
+
+          - task: CmdLine@2
+            inputs:
+              script: 'trivy fs . --format table -o fs.html'
+          
+  
+          - task: Maven@4
+            displayName: "maven package "
+            inputs:
+              azureSubscription: 'banking-app-pardeep'
+              mavenPomFile: 'pom.xml'
+              goals: 'package'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              javaHomeOption: 'JDKVersion'
+              mavenVersionOption: 'Default'
+              mavenAuthenticateFeed: false
+              effectivePomSkip: false
+              sonarQubeRunAnalysis: false
+
+          -  task  :  MavenAuthenticate@0 
+             inputs  : 
+                artifactsFeeds  :  'bankingappfeed'
+
+          - task: Maven@4
+            displayName: "maven deploy in artifact"
+            inputs:
+              azureSubscription: 'banking-app-pardeep'
+              mavenPomFile: 'pom.xml'
+              goals: 'deploy'
+              options: '-DskipTests'
+              javaHomeOption: 'JDKVersion'
+              mavenAuthenticateFeed: true
+              mavenVersionOption: 'Default'
+          - task: PublishBuildArtifacts@1
+            displayName: "publishartifactinpipeline"
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)/target'
+              artifactName: 'bankingappjar'
+              publishLocation: 'Container'
+
+
+         
+
+  - stage: dockerbuildandpush
+    displayName: "docker build step"
+    jobs:
+      - job: "build"
+        
+        steps:
+             
+          - task: DownloadPipelineArtifact@2
+            displayName: "Download JAR artifact"
+            inputs:
+              buildType: 'current'
+              artifactName: 'bankingappJar'
+              targetPath: '$(Pipeline.Workspace)'
+          - task: Docker@2
+            inputs:
+              containerRegistry: 'maheshacrsvc'
+              repository: 'dev'
+              command: 'buildAndPush'
+              Dockerfile: '**/Dockerfile'
+              buildContext: '$(Pipeline.Workspace)'
+              tags: |
+                $(imageTag)
+  -  stage  :  deploy_to_aks 
+     displayName  :  deploy_to_aks 
+     jobs  : 
+       -  job  :  deploy_to_aks 
+          displayName  :  deploy_to_aks 
+          steps  : 
+            -  task  :  CmdLine@2 
+               inputs  : 
+                 script  : | 
+                    echo "Replacing image tag in ds.yml..." 
+                    sed -i "s/_BUILD_ID_/$(imageTag)/g" ds.yml 
+                    pwd
+                    ls -l
+               displayName  :  'Replace __BUILD_ID__ with  Build ID' 
+            -  task  :  KubernetesManifest@1 
+               inputs  : 
+                 action  :  'deploy' 
+                 connectionType  :  'kubernetesServiceConnection' 
+                 kubernetesServiceConnection  :  'maheshakssvc' 
+                 namespace  :  'default' 
+                 manifests  :  'ds.yml'         
