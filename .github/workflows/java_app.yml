@@ -16,6 +16,11 @@ jobs:
     - name: Build
       run: mvn clean verify
 
+    - name: Move JAR
+      run: |
+        mkdir -p bankingappJar
+        cp target/*.jar bankingappJar/
+
     # ✅ SonarQube Scan (NEW STEP 🔥)
     - name: Sonar Scan
       run: |
