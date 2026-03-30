@@ -55,3 +55,28 @@ jobs:
 
     - name: Scan Docker Image
       run: trivy image myapp
+
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+
+    - name: Deploy to VM
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
+
+        docker stop myapp || true
+        docker rm myapp || true
+
+        if [ ! -d "myapp" ]; then
+          git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git myapp
+        fi
+
+        cd myapp
+        git pull origin main
+
+        docker build -t myapp .
+        docker run -d -p 8080:8080 --name myapp myapp
+
+        EOF
