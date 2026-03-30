@@ -12,5 +12,14 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '17'
+# ✅ Build + Test
     - name: Build
-      run: mvn clean package
+      run: mvn clean verify
+
+    # ✅ SonarQube Scan (NEW STEP 🔥)
+    - name: Sonar Scan
+      run: |
+        mvn sonar:sonar \
+        -Dsonar.projectKey=myapp \
+        -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+        -Dsonar.login=${{ secrets.SONAR_TOKEN }}
