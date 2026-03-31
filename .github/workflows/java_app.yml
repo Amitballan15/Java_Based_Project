@@ -74,12 +74,25 @@ jobs:
         --exclude '.git' --exclude 'target' ./ \
         ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/myapp    
         
-    - name: Deploy to VM
-      run: |
-        ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
-        cd ~/myapp
-        docker stop myapp || true
-        docker rm myapp || true
-        docker build -t myapp .
-        docker run -d -p 8080:8080 --name myapp myapp
+        - name: Deploy to VM
+          run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
+
+          docker stop myapp || true
+          docker rm myapp || true
+
+        #  WAIT FOR MYSQL
+        until docker exec mysql mysqladmin ping -h "localhost" --silent; do
+          echo "Waiting for MySQL..."
+          sleep 5
+          done
+
+        echo "MySQL is ready "
+
+        #  RUN APP
+        docker run -d \
+          --network mynet \
+          -p 8080:8080 \
+          --name myapp myapp
+
         EOF
