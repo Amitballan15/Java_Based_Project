@@ -70,7 +70,7 @@ jobs:
 
     - name: Copy Files to VM
       run: |
-        scp -o StrictHostKeyChecking=no -r . ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/myapp
+        rsync -avz --exclude '.git' --exclude 'target' ./ ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/myapp
 
     - name: Deploy to VM
       run: |
