@@ -2,7 +2,7 @@ name: Java App Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 jobs:
@@ -10,89 +10,97 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      # Checkout code
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      # Setup Java
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-    # Build
-    - name: Build
-      run: mvn clean verify
+      # Build
+      - name: Build
+        run: mvn clean verify
 
-    # Move JAR 
-    - name: Move JAR
-      run: |
-        mkdir -p bankingappJar
-        cp target/*.jar bankingappJar/
+      # Move JAR
+      - name: Move JAR
+        run: |
+          mkdir -p bankingappJar
+          cp target/*.jar bankingappJar/
 
-    # Debug 
-    - name: Check JAR
-      run: ls -la bankingappJar
+      # Debug JAR
+      - name: Check JAR
+        run: ls -la bankingappJar
 
-    # Sonar Scan
-    - name: Sonar Scan
-      run: |
-        mvn sonar:sonar \
-        -Dsonar.projectKey=myapp \
-        -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-        -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+      # Sonar Scan
+      - name: Sonar Scan
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.projectKey=myapp \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
-    # Docker Build Step
-    - name: Build Docker Image
-      run: docker build -t myapp .
+      # Docker Build
+      - name: Build Docker Image
+        run: docker build -t myapp .
 
-    # Trivy Scan
-    - name: Install Trivy
-      run: |
-        sudo apt-get update
-        sudo apt-get install wget apt-transport-https gnupg lsb-release -y
-        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-        echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/trivy.list
-        sudo apt-get update
-        sudo apt-get install trivy -y
+      # Install Trivy
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install wget apt-transport-https gnupg lsb-release -y
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy -y
 
-    - name: Scan Docker Image
-      run: trivy image myapp
+      # Scan Docker Image
+      - name: Scan Docker Image
+        run: trivy image myapp
 
-        # DEBUG (Secrets check)
-    - name: Debug Secrets
-      run: |
-        echo "User: ${{ secrets.VM_USER }}"
-        echo "Host: ${{ secrets.VM_HOST }}"
+      # Debug Secrets
+      - name: Debug Secrets
+        run: |
+          echo "User: ${{ secrets.VM_USER }}"
+          echo "Host: ${{ secrets.VM_HOST }}"
 
-    - name: Setup SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
+      # Setup SSH
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
-        - name: Copy Files to VM
-          run: |
-            rsync -avz -e "ssh -o StrictHostKeyChecking=no" \
-            --exclude '.git' --exclude 'target' ./ \
-            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/myapp
-    
-        - name: Deploy to VM
-          run: |
-            ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
-    
-            docker stop myapp || true
-            docker rm myapp || true
-    
-            # WAIT FOR MYSQL
-            until docker exec mysql mysqladmin ping -h "localhost" --silent; do
-              echo "Waiting for MySQL..."
-              sleep 5
-            done
-    
-            echo "MySQL is ready "
-    
-            # RUN APP
-            docker run -d \
-              --network mynet \
-              -p 8080:8080 \
-              --name myapp myapp
-    
-            EOF
+      # Copy Files to VM
+      - name: Copy Files to VM
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" \
+          --exclude '.git' --exclude 'target' ./ \
+          ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/myapp
+
+      # Deploy to VM
+      - name: Deploy to VM
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} << 'EOF'
+
+          docker stop myapp || true
+          docker rm myapp || true
+
+          # WAIT FOR MYSQL
+          until docker exec mysql mysqladmin ping -h "localhost" --silent; do
+            echo "Waiting for MySQL..."
+            sleep 5
+          done
+
+          echo "MySQL is ready"
+
+          # RUN APP
+          docker run -d \
+            --network mynet \
+            -p 8080:8080 \
+            --name myapp myapp
+
+          EOF
